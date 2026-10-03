@@ -1,0 +1,35 @@
+{
+  "version": 2,
+  "callingConvention": "amd64-syscall",
+  "registers": {
+    "number": "rax",
+    "arg1": "rdi",
+    "arg2": "rsi",
+    "arg3": "rdx",
+    "arg4": "r10",
+    "arg5": "r8",
+    "arg6": "r9",
+    "return": "rax"
+  },
+  "errors": {
+    "ENOSYS": 38,
+    "EINVAL": 22,
+    "EFAULT": 14
+  },
+  "syscalls": [
+    { "name": "write", "number": 1, "summary": "Write bytes to fd 1 (serial) or 2 (VGA text)." },
+    { "name": "read", "number": 2, "summary": "fd 0 = keyboard; fd>=3 = VFS file." },
+    { "name": "yield", "number": 3, "summary": "Cooperative yield hint." },
+    { "name": "open", "number": 5, "summary": "Open path (NUL-terminated C string)." },
+    { "name": "close", "number": 6, "summary": "Close VFS fd." },
+    { "name": "ipc_send", "number": 24, "summary": "Send bytes to kernel IPC queue." },
+    { "name": "ipc_recv", "number": 25, "summary": "Receive bytes from IPC queue." },
+    { "name": "getpid", "number": 39, "summary": "Current process id." },
+    { "name": "exit", "number": 60, "summary": "Terminate process." }
+  ],
+  "userLoad": {
+    "textBase": "0x400000",
+    "maxTextBytes": 1048576,
+    "stackTop": "0x700000"
+  }
+}
