@@ -1,6 +1,0 @@
-# Xdos needs nightly for two things: the `x86-interrupt` calling
-# convention (interrupt handlers) and `-Z build-std` (compiling `core`
-# for a bare-metal target that has no prebuilt std).
-[toolchain]
-channel = "nightly"
-components = ["rust-src", "llvm-tools"]
