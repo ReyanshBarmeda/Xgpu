@@ -143,10 +143,6 @@ Possible directions for extending the project include:
 - VCD waveform analysis and debugging tools
 - integration with a higher-level compiler or assembler
 
-## License
-
-This repository does not currently declare a license in the root files. If you plan to publish or share the project publicly, consider adding a license such as MIT or Apache-2.0.
-
 ## Credits
 
 Built as a custom hardware accelerator exploration project in SystemVerilog with cocotb simulation.
