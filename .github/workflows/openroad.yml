@@ -99,7 +99,8 @@ jobs:
       - name: Install pinned sv2v, LibreLane, and Ciel
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends unzip curl
+          sudo apt-get install -y --no-install-recommends unzip curl util-linux
+          script --version
           curl -fsSL "https://github.com/zachjs/sv2v/releases/download/${SV2V_VERSION}/sv2v-Linux.zip" -o /tmp/sv2v.zip
           unzip -q /tmp/sv2v.zip -d /tmp/sv2v
           sudo install -m 0755 /tmp/sv2v/sv2v-Linux/sv2v /usr/local/bin/sv2v
@@ -142,11 +143,9 @@ jobs:
         id: run-openlane
         if: steps.verify-pdk.outputs.pdk_ready == 'true'
         run: |
-          librelane --dockerized \
-            --pdk-root "$HOME/.ciel" \
-            --pdk "${PDK_VARIANT}" \
-            --run-tag ci_run \
-            physical_design/config.json
+          # GitHub-hosted runners have no interactive TTY. LibreLane's
+          # Docker wrapper requests one, so provide a pseudo-terminal via util-linux.
+          script -q -e -c 'librelane --dockerized --pdk-root "$HOME/.ciel" --pdk "${PDK_VARIANT}" --run-tag ci_run physical_design/config.json' /dev/null
 
       - name: Check generated GDSII and summarize stage status
         id: check-outputs
