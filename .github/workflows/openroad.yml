@@ -97,7 +97,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
 
       - name: Install pinned sv2v and OpenLane 2 (${{ env.OPENLANE_VERSION }})
         run: |
