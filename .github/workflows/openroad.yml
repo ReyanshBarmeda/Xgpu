@@ -31,7 +31,7 @@ env:
   PDK_FAMILY: "sky130"
   PDK_VARIANT: "sky130A"
   # Pinned Volare open_pdks commit hash to keep PDK caching deterministic
-  VOLARE_PDK_HASH: "bdc9412b3e468c102d01b7cf6337be06ec6e9c9a"
+  VOLARE_PDK_HASH: "0fe599b2afb6708d281543108caf8310912f54af"
 
 jobs:
   yosys-synthesis:
@@ -106,7 +106,7 @@ jobs:
           unzip -q /tmp/sv2v.zip -d /tmp/sv2v
           sudo install -m 0755 /tmp/sv2v/sv2v-Linux/sv2v /usr/local/bin/sv2v
           python3 -m pip install --upgrade pip
-          python3 -m pip install "openlane==${OPENLANE_VERSION}" volare
+          python3 -m pip install "openlane==${OPENLANE_VERSION}"
 
       - name: Cache SKY130 PDK (avoid re-downloading on every run)
         id: cache-pdk
