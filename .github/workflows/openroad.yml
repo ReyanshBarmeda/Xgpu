@@ -1,4 +1,4 @@
-name: XGPU OpenROAD / OpenLane 2 Physical Design
+﻿name: XGPU OpenROAD / OpenLane 2 Physical Design
 
 on:
   push:
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       run_pnr:
-        description: "Run full OpenLane 2 SKY130 Place & Route (GDSII)"
+        description: "Run full LibreLane (OpenLane 2) SKY130 Place & Route (GDSII)"
         required: false
         default: true
         type: boolean
@@ -27,11 +27,9 @@ concurrency:
 
 env:
   SV2V_VERSION: "v0.0.12"
-  OPENLANE_VERSION: "2.2.9"
   PDK_FAMILY: "sky130"
   PDK_VARIANT: "sky130A"
-  # Pinned Volare open_pdks commit hash to keep PDK caching deterministic
-  VOLARE_PDK_HASH: "0fe599b2afb6708d281543108caf8310912f54af"
+  CIEL_PDK_HASH: "9233c19260cd813c3fa67dd4594fe4cc67016832"
 
 jobs:
   yosys-synthesis:
@@ -84,7 +82,7 @@ jobs:
           retention-days: 14
 
   openlane2-sky130:
-    name: OpenLane 2 / OpenROAD SKY130 Flow
+    name: LibreLane (OpenLane 2) / OpenROAD SKY130 Flow
     runs-on: ubuntu-24.04
     needs: yosys-synthesis
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.run_pnr }}
@@ -98,7 +96,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install pinned sv2v and OpenLane 2 (${{ env.OPENLANE_VERSION }})
+      - name: Install pinned sv2v, LibreLane, and Ciel
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends unzip curl
@@ -106,24 +104,26 @@ jobs:
           unzip -q /tmp/sv2v.zip -d /tmp/sv2v
           sudo install -m 0755 /tmp/sv2v/sv2v-Linux/sv2v /usr/local/bin/sv2v
           python3 -m pip install --upgrade pip
-          python3 -m pip install "openlane==${OPENLANE_VERSION}"
+          python3 -m pip install "librelane>=3.0.0,<4.0.0" ciel
+          librelane --version
+          ciel --version
 
       - name: Cache SKY130 PDK (avoid re-downloading on every run)
         id: cache-pdk
         uses: actions/cache@v4
         with:
-          path: ~/.volare
-          key: volare-${{ env.PDK_FAMILY }}-${{ env.VOLARE_PDK_HASH }}
+          path: ~/.ciel
+          key: ciel-${{ env.PDK_FAMILY }}-${{ env.CIEL_PDK_HASH }}
 
-      - name: Enable SKY130 PDK if not cached
+      - name: Enable SKY130 PDK via Ciel if not cached
         if: steps.cache-pdk.outputs.cache-hit != 'true'
         run: |
-          volare enable --pdk "${PDK_FAMILY}" "${VOLARE_PDK_HASH}"
+          ciel enable --pdk-family "${PDK_FAMILY}" "${CIEL_PDK_HASH}"
 
       - name: Verify SKY130 PDK availability before physical design
         id: verify-pdk
         run: |
-          LIB_PATH="$HOME/.volare/${PDK_VARIANT}/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib"
+          LIB_PATH="$HOME/.ciel/${PDK_VARIANT}/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib"
           if [[ -f "${LIB_PATH}" ]]; then
             echo "pdk_ready=true" >> "$GITHUB_OUTPUT"
             echo "Verified SKY130 PDK Liberty: ${LIB_PATH}"
@@ -132,18 +132,18 @@ jobs:
             echo "::warning::SKY130 PDK not found at ${LIB_PATH}; physical-design stages will be skipped."
           fi
 
-      - name: Prepare RTL for OpenLane 2
+      - name: Prepare RTL for LibreLane
         if: steps.verify-pdk.outputs.pdk_ready == 'true'
         run: |
           chmod +x physical_design/prepare_rtl.sh
           ./physical_design/prepare_rtl.sh
 
-      - name: Run OpenLane 2 (Yosys + OpenROAD + Magic/Netgen)
+      - name: Run LibreLane / OpenROAD SKY130 Flow
         id: run-openlane
         if: steps.verify-pdk.outputs.pdk_ready == 'true'
         run: |
-          openlane --dockerized \
-            --pdk-root "$HOME/.volare" \
+          librelane --dockerized \
+            --pdk-root "$HOME/.ciel" \
             --pdk "${PDK_VARIANT}" \
             --run-tag ci_run \
             physical_design/config.json
@@ -155,16 +155,16 @@ jobs:
           GDS_PATH="physical_design/runs/ci_run/final/gds/gpu.gds"
           METRICS_PATH="physical_design/runs/ci_run/final/metrics.json"
           {
-            echo "### OpenLane 2 / OpenROAD SKY130 Stage Status"
+            echo "### LibreLane / OpenROAD SKY130 Stage Status"
             echo "- **PDK Verification (${PDK_VARIANT}):** ${{ steps.verify-pdk.outputs.pdk_ready }}"
             if [[ "${{ steps.verify-pdk.outputs.pdk_ready }}" != "true" ]]; then
               echo "- **Physical Design (Synthesis -> Floorplan -> Place -> CTS -> Route -> Signoff -> GDSII):** SKIPPED (PDK unavailable)"
             elif [[ -f "${GDS_PATH}" ]]; then
-              echo "- **OpenLane 2 Flow:** COMPLETED"
+              echo "- **LibreLane / OpenROAD Flow:** COMPLETED"
               echo "- **GDSII Generated:** \`${GDS_PATH}\` ($(du -h "${GDS_PATH}" | cut -f1))"
               echo "gds_generated=true" >> "$GITHUB_OUTPUT"
             else
-              echo "- **OpenLane 2 Flow:** FAILED or INCOMPLETE (no final GDSII generated)"
+              echo "- **LibreLane / OpenROAD Flow:** FAILED or INCOMPLETE (no final GDSII generated)"
               echo "gds_generated=false" >> "$GITHUB_OUTPUT"
             fi
             if [[ -f "${METRICS_PATH}" ]]; then
@@ -172,7 +172,7 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload OpenLane 2 reports and GDSII (only when generated)
+      - name: Upload LibreLane reports and GDSII (only when generated)
         if: steps.check-outputs.outputs.gds_generated == 'true'
         uses: actions/upload-artifact@v4
         with:
