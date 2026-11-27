@@ -35,7 +35,9 @@ set input_delay_min  [expr {$clk_period * 0.04}]
 set output_delay_max [expr {$clk_period * $clk_io_pct}]
 set output_delay_min [expr {$clk_period * 0.04}]
 
-set non_clk_inputs [remove_from_collection [all_inputs] [get_ports $clk_port]]
+# OpenSTA does not implement Synopsys' remove_from_collection command.
+# List only actual top-level input ports (excluding clk) using port-name patterns.
+set non_clk_inputs [get_ports {reset start device_control_write_enable device_control_data* program_mem_read_ready* program_mem_read_data* data_mem_read_ready* data_mem_read_data* data_mem_write_ready*}]
 
 set_input_delay  -max $input_delay_max  -clock $clk_name $non_clk_inputs
 set_input_delay  -min $input_delay_min  -clock $clk_name $non_clk_inputs
