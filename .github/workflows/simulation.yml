@@ -1,0 +1,113 @@
+name: XGPU Functional Simulation
+
+on:
+  push:
+    branches: ["main", "feat/**", "fix/**"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cocotb-simulation:
+    name: sv2v + Icarus Verilog + Cocotb Tests
+    runs-on: ubuntu-24.04
+
+    env:
+      SV2V_VERSION: "v0.0.12"
+      COCOTB_VERSION: "1.9.2"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Icarus Verilog and system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends iverilog unzip curl
+
+      - name: Install pinned sv2v (${{ env.SV2V_VERSION }})
+        run: |
+          curl -fsSL "https://github.com/zachjs/sv2v/releases/download/${SV2V_VERSION}/sv2v-Linux.zip" -o /tmp/sv2v.zip
+          unzip -q /tmp/sv2v.zip -d /tmp/sv2v
+          sudo install -m 0755 /tmp/sv2v/sv2v-Linux/sv2v /usr/local/bin/sv2v
+          sv2v --version
+
+      - name: Install pinned Cocotb (${{ env.COCOTB_VERSION }})
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install "cocotb==${COCOTB_VERSION}" pytest
+
+      - name: Convert SystemVerilog RTL with sv2v and compile with Icarus Verilog
+        run: |
+          mkdir -p build sim_reports
+          chmod +x physical_design/prepare_rtl.sh
+          ./physical_design/prepare_rtl.sh | tee sim_reports/sv2v.log
+          {
+            echo '`timescale 1ns/1ns'
+            cat physical_design/build/gpu_sv2v.v
+          } > build/gpu.v
+          iverilog -Wall -g2012 -s gpu -o build/sim.vvp build/gpu.v 2>&1 | tee sim_reports/iverilog_compile.log
+
+      - name: Run Cocotb test_matadd
+        run: |
+          set -o pipefail
+          export LIBPYTHON_LOC="$(cocotb-config --libpython)"
+          export PYTHONPATH="${PWD}:${PYTHONPATH:-}"
+          rm -f results.xml
+          MODULE=test.test_matadd \
+            vvp -M "$(cocotb-config --prefix)/cocotb/libs" -m libcocotbvpi_icarus build/sim.vvp \
+            2>&1 | tee sim_reports/test_matadd.log
+          cp results.xml sim_reports/results_matadd.xml
+          python3 - << 'EOF'
+          import sys, xml.etree.ElementTree as ET
+          tree = ET.parse("sim_reports/results_matadd.xml")
+          testcases = tree.findall(".//testcase")
+          failures = tree.findall(".//failure") + tree.findall(".//error")
+          if not testcases:
+              sys.exit("ERROR: test_matadd executed 0 testcases")
+          if failures:
+              sys.exit(f"ERROR: test_matadd reported {len(failures)} failure(s)")
+          print(f"PASS: test_matadd executed {len(testcases)} testcase(s) with 0 failures")
+          EOF
+
+      - name: Run Cocotb test_matmul
+        run: |
+          set -o pipefail
+          export LIBPYTHON_LOC="$(cocotb-config --libpython)"
+          export PYTHONPATH="${PWD}:${PYTHONPATH:-}"
+          rm -f results.xml
+          MODULE=test.test_matmul \
+            vvp -M "$(cocotb-config --prefix)/cocotb/libs" -m libcocotbvpi_icarus build/sim.vvp \
+            2>&1 | tee sim_reports/test_matmul.log
+          cp results.xml sim_reports/results_matmul.xml
+          python3 - << 'EOF'
+          import sys, xml.etree.ElementTree as ET
+          tree = ET.parse("sim_reports/results_matmul.xml")
+          testcases = tree.findall(".//testcase")
+          failures = tree.findall(".//failure") + tree.findall(".//error")
+          if not testcases:
+              sys.exit("ERROR: test_matmul executed 0 testcases")
+          if failures:
+              sys.exit(f"ERROR: test_matmul reported {len(failures)} failure(s)")
+          print(f"PASS: test_matmul executed {len(testcases)} testcase(s) with 0 failures")
+          EOF
+
+      - name: Upload simulation logs and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xgpu-simulation-reports
+          path: |
+            sim_reports/
+            test/logs/
+          retention-days: 14

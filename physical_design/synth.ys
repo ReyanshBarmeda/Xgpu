@@ -1,0 +1,46 @@
+# Standalone Yosys synthesis script for XGPU (`gpu`)
+#
+# Prerequisites:
+#   1. Run `./physical_design/prepare_rtl.sh` to generate `physical_design/build/gpu_sv2v.v`.
+#   2. Create `physical_design/reports/` directory (`mkdir -p physical_design/reports`).
+#
+# Usage (generic gate-level synthesis + cell count):
+#   yosys -s physical_design/synth.ys | tee physical_design/reports/yosys_synth.log
+#
+# Usage (SKY130 HD Liberty technology mapping + area estimate):
+#   yosys -p "
+#     read_verilog physical_design/build/gpu_sv2v.v;
+#     hierarchy -check -top gpu;
+#     synth -top gpu;
+#     dfflibmap -liberty \$SKY130_HD_LIB;
+#     abc -liberty \$SKY130_HD_LIB;
+#     clean;
+#     stat -liberty \$SKY130_HD_LIB;
+#     write_verilog -noattr physical_design/build/gpu_sky130_netlist.v
+#   "
+
+# Read sv2v-converted Verilog-2005 RTL
+read_verilog physical_design/build/gpu_sv2v.v
+
+# Elaborate and check hierarchy with `gpu` as top-level module
+hierarchy -check -top gpu
+
+# Generic RTL synthesis (preserves architecture; no cores removed)
+proc
+opt
+fsm
+opt
+memory
+opt
+techmap
+opt
+clean
+
+# Design rule checks (unconnected nets, combinational loops, multi-driven nets)
+check -assert
+
+# Report cell counts and statistics (generic cells; pass -liberty for um^2 area)
+tee -o physical_design/reports/synth_stat.txt stat
+
+# Write synthesized netlist
+write_verilog -noattr physical_design/build/gpu_generic_netlist.v
